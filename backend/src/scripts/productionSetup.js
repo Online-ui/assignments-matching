@@ -203,7 +203,6 @@ async function populateLecturers(client) {
     ('Dr. Kwame Bonsu', 'k.bonsu@university.edu', 11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('Dr. Ama Gyamfi', 'a.gyamfi@university.edu', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('Dr. Nii Quaye', 'n.quaye@university.edu', 12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ```javascript
     ('Prof. Akosua Manu', 'a.manu@university.edu', 15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('Dr. Kwabena Asiedu', 'k.asiedu@university.edu', 11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('Dr. Adwoa Ofori', 'a.ofori@university.edu', 13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
