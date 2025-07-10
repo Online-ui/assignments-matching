@@ -7,6 +7,8 @@ async function productionSetup() {
   console.log('🚀 Starting production database setup...\n');
   console.log('Environment:', process.env.NODE_ENV);
   console.log('Database URL exists:', !!process.env.DATABASE_URL);
+  console.log('Current directory:', process.cwd());
+  console.log('Script directory:', __dirname);
 
   // Configure client based on environment
   const clientConfig = process.env.DATABASE_URL 
@@ -43,27 +45,35 @@ async function productionSetup() {
     if (tableCheck.rows.length === 0) {
       console.log('\n📋 Creating database schema...');
       
-      // Read and execute schema
-      const schemaPath = path.join(__dirname, '../../database/schema.sql');
-      let schemaSQL = fs.readFileSync(schemaPath, 'utf8');
+      // Fix the path - go up from scripts to src, then to database
+      const schemaPath = path.join(__dirname, '..', '..', 'database', 'schema.sql');
+      console.log('Looking for schema at:', schemaPath);
       
-      // Remove CREATE DATABASE and \c commands for Render
-      schemaSQL = schemaSQL
-        .replace(/CREATE DATABASE.*?;/gi, '')
-        .replace(/\\c.*?(\n|$)/gi, '');
+      // Check if file exists
+      if (!fs.existsSync(schemaPath)) {
+        console.log('Schema file not found, creating tables directly...');
+        await createTablesDirectly(client);
+      } else {
+        let schemaSQL = fs.readFileSync(schemaPath, 'utf8');
+        
+        // Remove CREATE DATABASE and \c commands for Render
+        schemaSQL = schemaSQL
+          .replace(/CREATE DATABASE.*?;/gi, '')
+          .replace(/\\c.*?(\n|$)/gi, '');
 
-      // Split by semicolon and execute each statement
-      const statements = schemaSQL
-        .split(';')
-        .filter(stmt => stmt.trim().length > 0)
-        .map(stmt => stmt.trim() + ';');
+        // Split by semicolon and execute each statement
+        const statements = schemaSQL
+          .split(';')
+          .filter(stmt => stmt.trim().length > 0)
+          .map(stmt => stmt.trim() + ';');
 
-      for (const statement of statements) {
-        try {
-          await client.query(statement);
-        } catch (err) {
-          console.error('Error executing statement:', err.message);
-          console.error('Statement:', statement.substring(0, 100) + '...');
+        for (const statement of statements) {
+          try {
+            await client.query(statement);
+          } catch (err) {
+            console.error('Error executing statement:', err.message);
+            console.error('Statement:', statement.substring(0, 100) + '...');
+          }
         }
       }
       
@@ -110,6 +120,90 @@ async function productionSetup() {
   } finally {
     await client.end();
   }
+}
+
+// Fallback function to create tables directly if schema.sql is not found
+async function createTablesDirectly(client) {
+  console.log('Creating tables programmatically...');
+  
+  // Create fields table
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS fields (
+      id SERIAL PRIMARY KEY,
+      code VARCHAR(50) UNIQUE NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Create lecturers table
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS lecturers (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(100) UNIQUE NOT NULL,
+      max_students INTEGER DEFAULT 10,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Create students table
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS students (
+      id SERIAL PRIMARY KEY,
+      kobo_id VARCHAR(100) UNIQUE NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(100) UNIQUE NOT NULL,
+      index_number VARCHAR(50) UNIQUE NOT NULL,
+      program VARCHAR(100),
+      level VARCHAR(20),
+      first_choice_field_id INTEGER REFERENCES fields(id),
+      second_choice_field_id INTEGER REFERENCES fields(id),
+      third_choice_field_id INTEGER REFERENCES fields(id),
+      assigned_lecturer_id INTEGER REFERENCES lecturers(id),
+      assigned_field_id INTEGER REFERENCES fields(id),
+      assignment_status VARCHAR(20) DEFAULT 'pending',
+      submission_time TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Create lecturer_fields table
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS lecturer_fields (
+      id SERIAL PRIMARY KEY,
+      lecturer_id INTEGER REFERENCES lecturers(id) ON DELETE CASCADE,
+      field_id INTEGER REFERENCES fields(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(lecturer_id, field_id)
+    )
+  `);
+
+  // Create assignment_logs table
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS assignment_logs (
+      id SERIAL PRIMARY KEY,
+      run_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      total_students INTEGER,
+      assigned_count INTEGER,
+      unassigned_count INTEGER,
+      strategy VARCHAR(50),
+      details JSONB,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Create indexes
+  await client.query('CREATE INDEX IF NOT EXISTS idx_students_kobo_id ON students(kobo_id)');
+  await client.query('CREATE INDEX IF NOT EXISTS idx_students_email ON students(email)');
+  await client.query('CREATE INDEX IF NOT EXISTS idx_students_index_number ON students(index_number)');
+  await client.query('CREATE INDEX IF NOT EXISTS idx_students_assignment_status ON students(assignment_status)');
+  await client.query('CREATE INDEX IF NOT EXISTS idx_lecturer_fields_lecturer ON lecturer_fields(lecturer_id)');
+  await client.query('CREATE INDEX IF NOT EXISTS idx_lecturer_fields_field ON lecturer_fields(field_id)');
 }
 
 async function populateFields(client) {
@@ -178,7 +272,7 @@ async function populateLecturers(client) {
   
   const lecturersSQL = `
     INSERT INTO lecturers (name, email, max_students, created_at, updated_at) VALUES
-    ('Dr. Kwame Asante', 'k.asante@university.edu', 12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('Dr. Kwame Asante', 'k.asante@university.edu', 12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('Prof. Ama Mensah', 'a.mensah@university.edu', 15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('Dr. Kofi Owusu', 'k.owusu@university.edu', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('Dr. Akosua Boateng', 'a.boateng@university.edu', 12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
