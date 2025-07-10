@@ -9,7 +9,7 @@ echo "NPM version: $(npm --version)"
 
 # Install dependencies
 echo "📦 Installing dependencies..."
-npm ci --include=dev
+npm install --include=dev
 
 # Run database setup
 echo "🗄️ Setting up database..."
