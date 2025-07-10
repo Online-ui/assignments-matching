@@ -1,0 +1,30 @@
+databases:
+  - name: student-lecturer-db
+    databaseName: student_lecturer_matching
+    user: slm_user
+    region: oregon
+    plan: free
+
+services:
+  - type: web
+    name: student-lecturer-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: cd backend && ./build.sh
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: student-lecturer-db
+          property: connectionString
+      - key: KOBO_API_URL
+        sync: false
+      - key: KOBO_TOKEN
+        sync: false
+      - key: FORM_UID
+        sync: false
+      - key: PORT
+        value: 10000
